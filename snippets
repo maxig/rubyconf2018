@@ -1,0 +1,237 @@
+# Scoruby
+# ID  Age Employment  Education Marital Occupation  Income  Gender  Deductions  Hours IGNORE_Accounts RISK_Adjustment
+# 1004641 38  Private College Unmarried Service 81838 Female  0 72  UnitedStates  0
+require 'scoruby'
+
+sample = {
+  ID: 1014641,
+  Age: 40,
+  Employment: 'Private',
+  Education: 'HSgrad',
+  Marital: 'Unmarried',
+  Occupation: 'Executive',
+  Income: 126888.91,
+  Gender: 'Male',
+  Deductions: 0,
+  Hours: 34,
+  IGNORE_Accounts: 'UnitedStates',
+  RISK_Adjustment: 0
+}
+
+# RandomForest
+random_forest = Scoruby.load_model 'r_random_forest.pmml'
+random_forest.score(sample)
+random_forest.decisions_count(sample)
+
+# Tree
+decision_tree = Scoruby.load_model 'r_tree.pmml'
+decision_tree.score(sample)
+
+# Naive Bayes
+naive_bayes = Scoruby.load_model 'r_bayes.pmml'
+naive_bayes.lvalues(sample)
+
+# AI4r
+require 'ai4r'
+include Ai4r::Classifiers
+include Ai4r::Data
+
+# Load data
+data_set = DataSet.new
+data_set.load_csv_with_labels('audit.csv')
+
+# Teach
+b = NaiveBayes.new.set_parameters({ m: 12 }).build(data_set)
+
+# Predict
+b.eval(sample.values)
+b.get_probability_map(sample.values)
+
+# Classifier-reborn
+require 'classifier-reborn'
+require 'csv'
+
+training_set = CSV.read('audit.csv');
+categories   = ['0', '1']
+
+# Pass :auto_categorize option to allow feeding previously unknown categories
+classifier = ClassifierReborn::Bayes.new categories, auto_categorize: true
+
+training_set.each do |a_line|
+  # next if a_line.empty? || '#' == a_line.strip[0]
+  # parts = a_line.strip.split(':')
+  # classifier.train(parts.first, parts.last)
+  classifier.train(a_line.last, a_line[0...-1].join('.'))
+end
+
+classifier.classify(sample.values.join('.'))
+
+sample = {
+  ID: '1014641',
+  Age: '40',
+  Employment: 'Private',
+  Education: 'HSgrad',
+  Marital: 'Unmarried',
+  Occupation: 'Executive',
+  Income: '126888.91',
+  Gender: 'Male',
+  Deductions: '0',
+  Hours: '34',
+  IGNORE_Accounts: 'UnitedStates',
+  RISK_Adjustment: '0'
+}
+
+# Cerebrum
+require 'csv'
+require 'cerebrum'
+
+tokenizer = -> (val) do
+  return 0 if val == '0'
+  val.to_f.zero? ? val.to_i(36) : val.to_f
+end
+
+network = Cerebrum.new
+data = CSV.read('audit.csv');
+data.shift
+training_set = data.map { |arr| arr.map { |v| tokenizer.call(v) } };
+network.train(training_set.map { |data| { input: data[0...-1], output: [data.last] } })
+
+dump_filename = 'cerebrum_nn.dump'
+File.open(dump_filename, 'wb') { |f| f.write(Marshal.dump(network)) }
+network = Marshal.load(File.binread(dump_filename))
+
+network.run(sample.values.map { |e| tokenizer.call(e) })
+
+# Ruby-OpenCV
+# How-to install OpenCV macOS https://www.pyimagesearch.com/2016/12/05/macos-install-opencv-3-and-python-3-5/
+require 'opencv'
+
+image = nil
+begin
+  image = Cv::imread('baby.png', Cv::CV_LOAD_IMAGE_COLOR) # Read the file.
+rescue
+  puts 'Could not open or find the image.'
+  exit
+end
+
+window = Cv::Window.new('Display window') # Create a window for display.
+window.show(image) # Show our image inside it.
+Cv::wait_key # Wait for a keystroke in the window.
+
+# Classify faces
+require 'opencv'
+
+folder = '/Users/max/work/sumatosoft/libs/opencv/data'
+haar_classifier_names = [
+  'haarcascades/haarcascade_frontalface_alt.xml',
+  'haarcascades/haarcascade_profileface.xml',
+  'haarcascades/haarcascade_frontalcatface_extended.xml'
+]
+
+# classifier = Cv::CascadeClassifier.new(File.join(folder, 'haarcascade_frontalface_alt.xml'))
+# image = Cv::imread('baby.png', -1)
+# image = Cv::imread('conf1.jpg', -1)
+image = Cv::imread('conf2.jpg', Cv::COLOR_BGR2GRAY)
+
+color = Cv::Scalar.new(0, 255, 255)
+haar_classifier_names.each.with_index do |classifier_name, idx|
+  classifier = Cv::CascadeClassifier.new(File.join(folder, classifier_name))
+  classifier.detect_multi_scale(image, scale_factor: 1.01, min_neighbors: 5).each do |r|
+    pt1 = Cv::Point.new(r.x, r.y)
+    pt2 = Cv::Point.new(r.x + r.width, r.y + r.height)
+    image.rectangle!(pt1, pt2, color, thickness: 1 * (idx + 1), line_type: Cv::CV_AA)
+  end
+end
+
+# show(image)
+Cv::Window.new('Face detection').show(image)
+Cv::wait_key
+
+# For just one classifier
+require 'opencv'
+
+def classify(filename = 'conf2.jpg', scale_factor = 1.1, min_neighbors = 3)
+  folder = '/Users/max/work/sumatosoft/libs/opencv/data'
+  image = Cv::imread(filename, Cv::COLOR_BGR2GRAY)
+
+  color = Cv::Scalar.new(0, 255, 255)
+  classifier = Cv::CascadeClassifier.new(File.join(folder, 'haarcascades/haarcascade_frontalface_alt.xml'))
+  classifier.detect_multi_scale(image, scale_factor: scale_factor, min_neighbors: min_neighbors).each do |r|
+    pt1 = Cv::Point.new(r.x, r.y)
+    pt2 = Cv::Point.new(r.x + r.width, r.y + r.height)
+    image.rectangle!(pt1, pt2, color, thickness: 2, line_type: Cv::CV_AA)
+  end
+
+  output_filename = filename.split('.')[0...-1].join('_') + '_result.' + filename.split('.').last
+  Cv::imwrite(output_filename, image)
+
+  output_filename
+end
+
+classify
+classify('conf2.jpg', 1.01, 1)
+classify('conf2.jpg', 1.01, 50)
+classify('conf2.jpg', 1.5)
+
+# LBP
+require 'opencv'
+
+folder = '/Users/max/work/sumatosoft/libs/opencv/data'
+lbp_classifier_names = [
+  'lbpcascades/lbpcascade_frontalcatface.xml',
+  'lbpcascades/lbpcascade_frontalface.xml',
+  'lbpcascades/lbpcascade_frontalface_improved.xml',
+  'lbpcascades/lbpcascade_profileface.xml'
+]
+
+image = Cv::imread('conf2.jpg', Cv::COLOR_BGR2GRAY)
+
+color = Cv::Scalar.new(255, 100, 20)
+lbp_classifier_names.each.with_index do |classifier_name, idx|
+  classifier = Cv::CascadeClassifier.new(File.join(folder, classifier_name))
+  classifier.detect_multi_scale(image, scale_factor: 1.01, min_neighbors: 5).each do |r|
+    pt1 = Cv::Point.new(r.x, r.y)
+    pt2 = Cv::Point.new(r.x + r.width, r.y + r.height)
+    image.rectangle!(pt1, pt2, color, thickness: 1 * (idx + 1), line_type: Cv::CV_AA)
+  end
+end
+
+# show(image)
+Cv::Window.new('Face detection 2').show(image)
+Cv::wait_key
+
+# TensorFlow
+# failed to install tensorflow.rb
+
+# Keras
+
+
+# Test OpenCV with python
+# 1st version with running script
+t = Time.now; 10.times { `python opencv_haar.py conf2.jpg 1.1 2` }; Time.now - t
+
+# 2nd flask version
+# run python server first
+#   FLASK_APP=hello.py flask run
+#   * Running on http://localhost:5000/
+# OR
+#   python opencv_haar_server.py
+require 'net/http'
+Net::HTTP.get(URI('http://localhost:5000'))
+
+# Benchmark
+require 'benchmark'
+require 'net/http'
+
+n = 100
+Benchmark.bm do |x|
+  x.report('pytnon script:') { n.times { `python opencv_haar.py conf2.jpg 1.1 2` } }
+  x.report('pytnon server:') { n.times { Net::HTTP.get(URI('http://localhost:5000')) } }
+  x.report('ruby classify:') { n.times { classify } }
+end
+
+# =>
+#                    user     system      total        real
+# pytnon script:  0.020000   0.170000  72.710000 ( 41.939116)
+# pytnon server:  0.130000   0.080000   0.210000 ( 18.315461)
+# ruby classify: 48.230000   1.950000  50.180000 ( 19.003413)
